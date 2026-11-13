@@ -418,9 +418,9 @@
     padding: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px;
   }
   .codebox b { font-size: 20px; letter-spacing: .06em; }
-  a.wa {
-    display: flex; align-items: center; justify-content: center; margin-top: 10px;
-    background: var(--green); color: white; text-decoration: none; border-radius: 12px; padding: 11px 14px; font-weight: 700;
+  .wa {
+    display: flex; align-items: center; justify-content: center; width: 100%; margin-top: 10px;
+    background: var(--green); color: white; text-decoration: none; border: 0; border-radius: 12px; padding: 11px 14px; font-weight: 700;
   }
   .foot a { color: var(--muted); text-decoration: none; font-weight: 700; }
   .dialog h3 { margin: 0; font-size: 24px; }
@@ -778,8 +778,12 @@ function bootIdentity() {
   refreshLicense();
 }
 function canAddAccount() { return licensed || state.wallets.length < TRIAL_MAX; }
-function waLink() {
-  const text = 'طلب تفعيل حدود المحافظ\nكود الجهاز: ' + prettyCode(deviceId) + '\nالتفعيل 500 جنيه مرة واحدة';
+function customerPhone(raw) {
+  const digits = String(raw || '').replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/\D/g, '');
+  return /^01\d{9}$/.test(digits) ? digits : '';
+}
+function waLink(name, phone) {
+  const text = 'طلب تفعيل حدود المحافظ\nالاسم: ' + name + '\nالموبايل: ' + phone + '\nكود الجهاز: ' + prettyCode(deviceId) + '\nالتفعيل 500 جنيه مرة واحدة';
   return 'https://wa.me/' + WA_PHONE + '?text=' + encodeURIComponent(text);
 }
 
@@ -1485,14 +1489,25 @@ function openActivate() {
   showModal(
     '<form class="dialog" id="actForm"><h3>تفعيل النظام</h3>' +
     '<div class="price"><b class="num">500</b><span>جنيه · مرة واحدة</span></div>' +
+    '<div class="field"><label>الاسم</label><input id="actName" autocomplete="name"></div>' +
+    '<div class="field"><label>الموبايل</label><input id="actPhone" class="num" dir="ltr" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx"></div>' +
     '<div class="field"><label>كود الجهاز</label></div>' +
     '<div class="codebox"><b class="num" id="deviceCode">' + esc(code) + '</b><button class="line" type="button" id="copyCode">نسخ</button></div>' +
-    '<a class="wa" href="' + esc(waLink()) + '" target="_blank" rel="noopener">واتساب 01000072951</a>' +
+    '<button class="wa" type="button" id="waBtn">واتساب 01000072951</button>' +
     '<div class="field"><label>كود التفعيل</label><input id="licInput" class="num" dir="ltr" autocomplete="off" placeholder="XXXX-XXXX-XXXX-XXXX"></div>' +
     '<div class="err" id="licErr"></div>' +
     '<div class="end"><span></span><div class="right"><button class="line" type="button" data-act="close">إغلاق</button><button class="solid" type="submit">تفعيل</button></div></div></form>',
     true
   );
+  document.getElementById('waBtn').onclick = () => {
+    const err = document.getElementById('licErr');
+    const name = document.getElementById('actName').value.trim();
+    const phone = customerPhone(document.getElementById('actPhone').value);
+    if (!name) { err.textContent = 'اكتب الاسم'; return; }
+    if (!phone) { err.textContent = 'اكتب موبايل صحيح'; return; }
+    err.textContent = '';
+    window.open(waLink(name, phone), '_blank', 'noopener');
+  };
   document.getElementById('copyCode').onclick = async () => {
     const text = prettyCode(deviceId);
     try {
@@ -1500,7 +1515,7 @@ function openActivate() {
       toast('تم النسخ');
     } catch (err) { toast(text); }
   };
-  document.getElementById('licInput').focus();
+  document.getElementById('actName').focus();
   document.getElementById('actForm').onsubmit = (e) => {
     e.preventDefault();
     const typed = normalizeCode(document.getElementById('licInput').value);
