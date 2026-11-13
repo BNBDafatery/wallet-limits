@@ -4,7 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#0e1c33" id="themeColor">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="حدود المحافظ">
 <title>حدود المحافظ · BNB</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <script>try{if(localStorage.getItem('wallet-limits-theme')==='dark')document.documentElement.dataset.theme='dark';}catch(e){}</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230e1c33'/%3E%3Ctext x='16' y='21' text-anchor='middle' font-family='Arial' font-size='11' font-weight='700' fill='%23f3e6c8'%3EBNB%3C/text%3E%3C/svg%3E">
 <style>
@@ -454,6 +460,21 @@
   }
   .toast[hidden] { display: none; }
   .toast button { background: transparent; color: #f3d48a; border: 0; font-weight: 800; font-size: 15px; }
+  .install {
+    position: fixed; z-index: 45; left: 50%; bottom: 18px; transform: translateX(-50%);
+    width: min(560px, calc(100% - 28px));
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 14px 14px 14px 16px; border-radius: 18px;
+    background: var(--navy); color: #f3e6c8;
+    box-shadow: 0 16px 40px rgba(14, 23, 38, .28);
+  }
+  .install[hidden] { display: none; }
+  .install b { display: block; color: white; font-size: 16px; }
+  .install span { display: block; margin-top: 3px; color: #e6d3ae; font-size: 13px; font-weight: 600; line-height: 1.45; }
+  .install-actions { display: flex; gap: 8px; flex: none; }
+  .install .solid { background: #f3e6c8; color: #0e1c33; }
+  .install .line { background: transparent; color: #f3e6c8; border-color: rgba(243, 230, 200, .45); }
+  [data-theme="dark"] .install { background: #16233a; }
   @media (max-width: 980px) {
     .stats { grid-template-columns: 1fr 1fr; }
     .row, .tools { flex-direction: column; align-items: stretch; }
@@ -592,6 +613,16 @@
   <footer class="foot"><span><b>BNB</b> · إدارة الحلول الرقمية</span><span>حدود المحافظ</span></footer>
 </div>
 <div id="overlay" class="overlay" hidden></div>
+<div class="install" id="installBar" hidden>
+  <div>
+    <b id="installTitle">ثبّت التطبيق</b>
+    <span id="installText">افتح حدود المحافظ كتطبيق من غير المتصفح</span>
+  </div>
+  <div class="install-actions">
+    <button class="solid" type="button" id="installYes">تثبيت</button>
+    <button class="line" type="button" id="installNo">لاحقاً</button>
+  </div>
+</div>
 <div id="toast" class="toast" hidden></div>
 <script>
 const KEY = 'wallet-limits-v2';
@@ -1831,6 +1862,8 @@ function openLog() {
 }
 function applyTheme() {
   document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+  const themeMeta = document.getElementById('themeColor');
+  if (themeMeta) themeMeta.setAttribute('content', darkMode ? '#0b1220' : '#0e1c33');
   const btn = document.getElementById('themeBtn');
   if (!btn) return;
   btn.setAttribute('aria-label', darkMode ? 'الوضع الفاتح' : 'الوضع الداكن');
@@ -1889,6 +1922,68 @@ async function deleteWallet(id) {
   closeModal();
   commit();
 }
+const INSTALL_KEY = 'wallet-limits-install';
+let installEvent = null;
+function installSnoozed() {
+  try {
+    const saved = localStorage.getItem(INSTALL_KEY);
+    if (saved === 'yes') return true;
+    return !!saved && Date.now() < Number(saved);
+  } catch (e) { return false; }
+}
+function runningAsApp() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+function showInstall(mode) {
+  if (runningAsApp() || installSnoozed()) return;
+  const bar = document.getElementById('installBar');
+  const title = document.getElementById('installTitle');
+  const text = document.getElementById('installText');
+  const yes = document.getElementById('installYes');
+  if (!bar || !title || !text || !yes) return;
+  if (mode === 'ios') {
+    title.textContent = 'ثبّت التطبيق';
+    text.textContent = 'من زر المشاركة في سفاري اختر «إضافة إلى الشاشة الرئيسية»';
+    yes.hidden = true;
+  } else {
+    title.textContent = 'ثبّت التطبيق';
+    text.textContent = 'افتح حدود المحافظ كتطبيق من غير المتصفح';
+    yes.hidden = false;
+  }
+  bar.hidden = false;
+}
+function hideInstall(remember) {
+  const bar = document.getElementById('installBar');
+  if (bar) bar.hidden = true;
+  if (!remember) return;
+  try { localStorage.setItem(INSTALL_KEY, remember === 'yes' ? 'yes' : String(Date.now() + 7 * 24 * 60 * 60 * 1000)); } catch (e) {}
+}
+function setupInstall() {
+  const yes = document.getElementById('installYes');
+  const no = document.getElementById('installNo');
+  if (yes) yes.onclick = async () => {
+    if (!installEvent) { hideInstall('later'); return; }
+    installEvent.prompt();
+    const choice = await installEvent.userChoice;
+    installEvent = null;
+    hideInstall(choice.outcome === 'accepted' ? 'yes' : 'later');
+  };
+  if (no) no.onclick = () => hideInstall('later');
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    installEvent = event;
+    showInstall('browser');
+  });
+  window.addEventListener('appinstalled', () => {
+    installEvent = null;
+    hideInstall('yes');
+    toast('تم تثبيت التطبيق');
+  });
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (ios) showInstall('ios');
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+setupInstall();
 loadFeed();
 try { hideMoney = localStorage.getItem(HIDE_KEY) === '1'; } catch (e) {}
 try { darkMode = localStorage.getItem(THEME_KEY) === 'dark'; } catch (e) {}
